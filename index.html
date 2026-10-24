@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Neon Dash</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+    body { background: #0a0a14; color: #fff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; overflow: hidden; }
+    #game-container { position: relative; border: 2px solid #00f0ff; box-shadow: 0 0 25px rgba(0,240,255,0.35); border-radius: 12px; overflow: hidden; background: #05050d; }
+    canvas { display: block; }
+    .ui-overlay { position: absolute; top: 16px; left: 16px; right: 16px; display: flex; justify-content: space-between; font-size: 18px; font-weight: bold; text-shadow: 0 0 8px rgba(0,240,255,0.8); pointer-events: none; }
+    #gameover-screen { position: absolute; inset: 0; background: rgba(5,5,15,0.88); display: none; flex-direction: column; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
+    #gameover-screen h1 { font-size: 38px; color: #ff0055; text-shadow: 0 0 15px #ff0055; margin-bottom: 8px; }
+    #gameover-screen p { font-size: 18px; color: #ddd; margin-bottom: 20px; }
+    .btn { background: #00f0ff; color: #05050d; border: none; padding: 12px 28px; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; transition: transform 0.1s, box-shadow 0.1s; box-shadow: 0 0 15px rgba(0,240,255,0.5); }
+    .btn:hover { transform: scale(1.05); box-shadow: 0 0 25px rgba(0,240,255,0.8); }
+    .hints { margin-top: 12px; font-size: 13px; color: #707590; }
+  </style>
+</head>
+<body>
+  <div id="game-container">
+    <div class="ui-overlay">
+      <div id="score">SCORE: 0</div>
+      <div id="highscore">BEST: 0</div>
+    </div>
+    <div id="gameover-screen">
+      <h1>GAME OVER</h1>
+      <p id="final-score">Score: 0</p>
+      <button class="btn" id="restart-btn" onclick="startGame()">PLAY AGAIN</button>
+    </div>
+    <canvas id="canvas" width="480" height="320"></canvas>
+  </div>
+  <p class="hints">Press <b>SPACE</b> or <b>TAP / CLICK</b> to Jump</p>
+  <script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const scoreEl = document.getElementById('score');
+    const highscoreEl = document.getElementById('highscore');
+    const goScreen = document.getElementById('gameover-screen');
+    const finalScoreEl = document.getElementById('final-score');
+
+    let player, obstacles, particles, score, highscore = 0, running = false, animId, speed;
+    const gravity = 0.65;
+
+    function reset() {
+      player = { x: 50, y: 240, w: 28, h: 28, vy: 0, jumped: false, rot: 0 };
+      obstacles = [];
+      particles = [];
+      score = 0;
+      speed = 5;
+    }
+
+    function spawnObstacle() {
+      const height = 24 + Math.random() * 32;
+      obstacles.push({ x: canvas.width + 20, y: 280 - height, w: 20, h: height, passed: false });
+    }
+
+    function jump() {
+      if (!running) return;
+      if (player.y >= 280 - player.h - 1) {
+        player.vy = -11.5;
+        for (let i = 0; i < 6; i++) {
+          particles.push({ x: player.x + 14, y: 280, vx: (Math.random() - 0.5) * 4, vy: -Math.random() * 3, life: 20, c: '#00f0ff' });
+        }
+      }
+    }
+
+    function update() {
+      player.vy += gravity;
+      player.y += player.vy;
+      if (player.y >= 280 - player.h) {
+        player.y = 280 - player.h;
+        player.vy = 0;
+      } else {
+        player.rot += 0.08;
+      }
+
+      if (Math.random() < 0.02 && (obstacles.length === 0 || obstacles[obstacles.length - 1].x < canvas.width - 150)) {
+        spawnObstacle();
+      }
+
+      speed = 5 + Math.floor(score / 50) * 0.4;
+
+      for (let i = obstacles.length - 1; i >= 0; i--) {
+        const obs = obstacles[i];
+        obs.x -= speed;
+
+        if (!obs.passed && obs.x + obs.w < player.x) {
+          obs.passed = true;
+          score += 10;
+          scoreEl.innerText = 'SCORE: ' + score;
+        }
+
+        if (player.x + 4 < obs.x + obs.w && player.x + player.w - 4 > obs.x && player.y + 4 < obs.y + obs.h && player.y + player.h > obs.y) {
+          gameOver();
+          return;
+        }
+
+        if (obs.x + obs.w < -10) obstacles.splice(i, 1);
+      }
+
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx; p.y += p.vy; p.life--;
+        if (p.life <= 0) particles.splice(i, 1);
+      }
+
+      draw();
+      if (running) animId = requestAnimationFrame(update);
+    }
+
+    function draw() {
+      ctx.fillStyle = '#05050d';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.strokeStyle = '#00f0ff33';
+      ctx.lineWidth = 1;
+      for (let y = 0; y < canvas.height; y += 40) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+      }
+
+      ctx.strokeStyle = '#00f0ff';
+      ctx.lineWidth = 2;
+      ctx.shadowColor = '#00f0ff';
+      ctx.shadowBlur = 10;
+      ctx.beginPath(); ctx.moveTo(0, 280); ctx.lineTo(canvas.width, 280); ctx.stroke();
+      ctx.shadowBlur = 0;
+
+      ctx.save();
+      ctx.translate(player.x + player.w/2, player.y + player.h/2);
+      ctx.rotate(player.rot);
+      ctx.fillStyle = '#00f0ff';
+      ctx.shadowColor = '#00f0ff';
+      ctx.shadowBlur = 12;
+      ctx.fillRect(-player.w/2, -player.h/2, player.w, player.h);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(-player.w/4, -player.h/4, player.w/2, player.h/2);
+      ctx.restore();
+
+      ctx.fillStyle = '#ff0055';
+      ctx.shadowColor = '#ff0055';
+      ctx.shadowBlur = 12;
+      for (const obs of obstacles) {
+        ctx.fillRect(obs.x, obs.y, obs.w, obs.h);
+      }
+      ctx.shadowBlur = 0;
+
+      for (const p of particles) {
+        ctx.fillStyle = p.c;
+        ctx.fillRect(p.x, p.y, 3, 3);
+      }
+    }
+
+    function gameOver() {
+      running = false;
+      cancelAnimationFrame(animId);
+      if (score > highscore) highscore = score;
+      highscoreEl.innerText = 'BEST: ' + highscore;
+      finalScoreEl.innerText = 'Score: ' + score;
+<!DOCTYPE html><html><head><title>Neon Dash</title><style>body{background:#0a0a14;color:#fff;font-family:sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;user-select:none;}#c{border:2px solid #00f0ff;box-shadow:0 0 20px #00f0ff;border-radius:8px;}h1{margin-bottom:10px;color:#00f0ff;text-shadow:0 0 10px #00f0ff;}</style></head><body><h1>NEON DASH</h1><canvas id="c" width="480" height="300"></canvas><p style="margin-top:10px;color:#888;">Press SPACE or Click to Jump</p><script>const c=document.getElementById("c"),x=c.getContext("2d");let p={y:220,vy:0},obs=[],score=0,dead=false;function jump(){if(dead){p.y=220;p.vy=0;obs=[];score=0;dead=false;return;}if(p.y>=220)p.vy=-12;}window.onkeydown=e=>{if(e.code==="Space"){e.preventDefault();jump();}};c.onpointerdown=jump;function loop(){if(!dead){p.vy+=0.65;p.y+=p.vy;if(p.y>220){p.y=220;p.vy=0;}if(Math.random()<0.02&&(obs.length===0||obs[obs.length-1].x<350))obs.push({x:480,h:20+Math.random()*25,p:false});for(let i=obs.length-1;i>=0;i--){let o=obs[i];o.x-=5;if(!o.p&&o.x<50){o.p=true;score+=10;}if(o.x<70&&o.x+15>50&&p.y+20>240-o.h)dead=true;if(o.x<-20)obs.splice(i,1);}}x.fillStyle="#05050d";x.fillRect(0,0,480,300);x.strokeStyle="#00f0ff";x.beginPath();x.moveTo(0,240);x.lineTo(480,240);x.stroke();x.fillStyle="#00f0ff";x.fillRect(50,p.y,20,20);x.fillStyle="#ff0055";obs.forEach(o=>x.fillRect(o.x,240-o.h,15,o.h));x.fillStyle="#fff";x.font="16px sans-serif";x.fillText("SCORE: "+score,15,25);if(dead){x.fillStyle="#ff0055";x.font="30px sans-serif";x.fillText("GAME OVER",160,140);x.font="16px sans-serif";x.fillText("Tap / Space to restart",165,170);}requestAnimationFrame(loop);}<\/script></body></html>index.html
+      goScreen.style.display = 'flex';
+    }
+
+    function startGame() {
+      reset();
+      goScreen.style.display = 'none';
+      scoreEl.innerText = 'SCORE: 0';
+      running = true;
+      animId = requestAnimationFrame(update);
+    }
+
+    window.addEventListener('keydown', e => { if (e.code === 'Space' || e.code === 'ArrowUp') { e.preventDefault(); jump(); } });
+    canvas.addEventListener('pointerdown', () => jump());
+    startGame();
+  </script>
+</body>
+</html>
